@@ -250,7 +250,7 @@ impl<'a> Connection {
 
         trace!(
             "Service Request {:?}",
-            ::std::str::from_utf8(&name.as_slice()).unwrap()
+            ::std::str::from_utf8(&name.as_slice()).expect("unable to convert service request to string")
         );
 
         let mut res = Packet::new(MessageType::ServiceAccept);
@@ -340,7 +340,7 @@ impl<'a> Connection {
 
 
         if let Some(request) = request {
-            let mut channel = self.channels.get_mut(&channel_id).unwrap();
+            let mut channel = self.channels.get_mut(&channel_id).expect("unable to request channel");
             channel.request(request);
         }
         else {
@@ -362,7 +362,7 @@ impl<'a> Connection {
         let channel_id = reader.read_uint32()?;
         let data = reader.read_string()?;
 
-        let mut channel = self.channels.get_mut(&channel_id).unwrap();
+        let mut channel = self.channels.get_mut(&channel_id).expect("unable to get channel");
         channel.data(data.as_slice())?;
 
         Ok(None)
