@@ -199,6 +199,7 @@ impl<'a> Connection {
     pub fn process(&mut self, packet: Packet) -> Result<Option<Packet>> {
         match packet.msg_type()
         {
+            MessageType::Disconnect => self.disconnect(packet),
             MessageType::KexInit => self.kex_init(packet),
             MessageType::NewKeys => self.new_keys(packet),
             MessageType::ServiceRequest => self.service_request(packet),
@@ -212,6 +213,11 @@ impl<'a> Connection {
                 Err(ConnectionError::ProtocolError)
             }
         }
+    }
+
+    fn disconnect(&mut self, packet: Packet) -> Result<Option<Packet>> {
+        debug!("Got a disconnect packet: {:?}", packet);
+        Ok(None)
     }
 
     fn new_keys(&mut self, packet: Packet) -> Result<Option<Packet>> {
