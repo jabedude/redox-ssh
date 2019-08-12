@@ -101,7 +101,7 @@ impl Channel {
                     loop {
                         use std::str::from_utf8_unchecked;
                         let mut buf = [0; 4096];
-                        let count = master.read(&mut buf).unwrap();
+                        let count = master.read(&mut buf).expect("error reading from master fd");
                         if count == 0 {
                             break;
                         }
@@ -122,30 +122,31 @@ impl Channel {
                         .read(true)
                         .write(true)
                         .open(&tty_path)
-                        .unwrap()
+                        .expect("unable to open stdin")
                         .into_raw_fd();
 
                     let stdout = OpenOptions::new()
                         .read(true)
                         .write(true)
                         .open(&tty_path)
-                        .unwrap()
+                        .expect("unable to open stdout")
                         .into_raw_fd();
 
                     let stderr = OpenOptions::new()
                         .read(true)
                         .write(true)
                         .open(&tty_path)
-                        .unwrap()
+                        .expect("unable to open stderr")
                         .into_raw_fd();
 
+                    // TODO: this might require root to login
                     process::Command::new("login")
                         .stdin(unsafe { Stdio::from_raw_fd(stdin) })
                         .stdout(unsafe { Stdio::from_raw_fd(stdout) })
                         .stderr(unsafe { Stdio::from_raw_fd(stderr) })
                         .before_exec(|| sys::before_exec())
                         .spawn()
-                        .unwrap();
+                        .expect("unable to login");
                 }
             }
         }
