@@ -323,7 +323,7 @@ impl<'a> Connection {
         let name = reader.read_utf8()?;
         let want_reply = reader.read_bool()?;
 
-
+        // TODO: add the other reqs
         let request = match &*name
         {
             "pty-req" => Some(ChannelRequest::Pty {
@@ -342,17 +342,15 @@ impl<'a> Connection {
         if let Some(request) = request {
             let mut channel = self.channels.get_mut(&channel_id).expect("unable to request channel");
             channel.request(request);
-        }
-        else {
-            warn!("Unkown channel request {}", name);
+        } else {
+            panic!("Unknown channel request {}", name);
         }
 
         if want_reply {
             let mut res = Packet::new(MessageType::ChannelSuccess);
             res.write_uint32(0)?;
             Ok(Some(res))
-        }
-        else {
+        } else {
             Ok(None)
         }
     }
