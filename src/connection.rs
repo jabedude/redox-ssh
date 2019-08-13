@@ -340,8 +340,8 @@ impl<'a> Connection {
 
 
         if let Some(request) = request {
-            let mut channel = self.channels.get_mut(&channel_id).expect("unable to request channel");
-            channel.request(request);
+            let channel = self.channels.get_mut(&channel_id).expect("unable to request channel");
+            channel.handle_request(request);
         } else {
             panic!("Unknown channel request {}", name);
         }
