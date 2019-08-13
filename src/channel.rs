@@ -66,7 +66,7 @@ impl Channel {
         self.max_packet_size
     }
 
-    pub fn request(&mut self, request: ChannelRequest) {
+    pub fn handle_request(&mut self, request: ChannelRequest) {
         match request
         {
             ChannelRequest::Pty {
