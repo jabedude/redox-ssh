@@ -22,6 +22,7 @@ pub struct Channel {
     read_thread: Option<JoinHandle<()>>,
 }
 
+// TODO: add the other reqs
 #[derive(Debug)]
 pub enum ChannelRequest {
     Pty {
