@@ -86,6 +86,7 @@ impl Channel {
                     pixel_height,
                 );
 
+/*
                 self.read_thread = Some(thread::spawn(move || {
                     #[cfg(target_os = "redox")]
                     use syscall::dup;
@@ -113,12 +114,14 @@ impl Channel {
 
                     println!("Quitting read thread.");
                 }));
+*/
 
                 self.pty = Some((master_fd, tty_path));
                 self.master = Some(unsafe { File::from_raw_fd(master_fd) });
             }
             ChannelRequest::Shell => {
-                if let Some(&(_, ref tty_path)) = self.pty.as_ref() {
+                if let Some(&(fd, ref tty_path)) = self.pty.as_ref() {
+                    debug!("tty_path: {:?}", tty_path);
                     let stdin = OpenOptions::new()
                         .read(true)
                         .write(true)
@@ -150,17 +153,22 @@ impl Channel {
                         .expect("unable to login");
                 }
             }
+            _ => debug!("Unhandled request"),
         }
         debug!("Channel Request: {:?}", request);
     }
 
-    pub fn data(&mut self, data: &[u8]) -> io::Result<()> {
+    pub fn data(&mut self, data: &[u8]) -> io::Result<Option<Vec<u8>>> {
         if let Some(ref mut master) = self.master {
             master.write_all(data)?;
-            master.flush()
+            master.flush()?;
+
+            let mut buf = vec![0u8; 4096];
+            let count = master.read(&mut buf)?;
+            Ok(Some(buf))
         }
         else {
-            Ok(())
+            Ok(None)
         }
     }
 }

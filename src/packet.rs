@@ -28,7 +28,7 @@ impl Packet {
 
     pub fn read_from<R: io::Read>(stream: &mut R) -> Result<Packet> {
         let packet_len = stream.read_uint32()? as usize;
-        trace!("Reading incoming packet ({} bytes)", packet_len);
+        debug!("Reading incoming packet ({} bytes)", packet_len);
 
         // TODO: Prevent packets that are too large
 

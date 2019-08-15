@@ -290,7 +290,7 @@ impl<'a> Connection {
 
     fn channel_open(&mut self, packet: Packet) -> Result<Option<Packet>> {
         let mut reader = packet.reader();
-        let channel_type = reader.read_utf8()?;
+        let _channel_type = reader.read_utf8()?;
         let peer_id = reader.read_uint32()?;
         let window_size = reader.read_uint32()?;
         let max_packet_size = reader.read_uint32()?;
@@ -335,6 +335,13 @@ impl<'a> Connection {
                 modes: reader.read_string()?,
             }),
             "shell" => Some(ChannelRequest::Shell),
+            "env" => {
+                debug!("recieved env!");
+                Some(ChannelRequest::Env {
+                        var_name: reader.read_utf8()?,
+                        var_value: reader.read_utf8()?,
+                })
+            },
             _ => None,
         };
 
@@ -343,7 +350,7 @@ impl<'a> Connection {
             let channel = self.channels.get_mut(&channel_id).expect("unable to request channel");
             channel.handle_request(request);
         } else {
-            panic!("Unknown channel request {}", name);
+            warn!("Unknown channel request {}", name);
         }
 
         if want_reply {
@@ -360,10 +367,22 @@ impl<'a> Connection {
         let channel_id = reader.read_uint32()?;
         let data = reader.read_string()?;
 
-        let mut channel = self.channels.get_mut(&channel_id).expect("unable to get channel");
-        channel.data(data.as_slice())?;
+        debug!("channel data: {:?}", data);
 
-        Ok(None)
+        let channel = self.channels.get_mut(&channel_id).expect("unable to get channel");
+        let buf = channel.data(data.as_slice())?;
+
+        if let Some(data) = buf {
+            let mut test_resp = Packet::new(MessageType::ChannelData);
+            test_resp.write_uint32(channel_id)?;
+            //test_resp.write_string("hello ssh!\n")?;
+            test_resp.write_bytes(&data)?;
+            debug!("sending test resp: {:?}", test_resp);
+            Ok(Some(test_resp))
+        } else {
+            Ok(None)
+        }
+
     }
 
     fn kex_init(&mut self, packet: Packet) -> Result<Option<Packet>> {
