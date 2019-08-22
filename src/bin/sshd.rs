@@ -28,7 +28,7 @@ impl log::Log for StdErrLogger {
 }
 
 pub fn main() {
-    let mut verbosity = LogLevelFilter::Warn;
+    let mut verbosity = LogLevelFilter::Debug;
     let mut foreground = false;
 
     let key_pair = File::open("server.key").and_then(
