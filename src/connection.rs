@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{self, BufReader, Read, Write};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
 
 use channel::{Channel, ChannelId, ChannelRequest};
 use encryption::{AesCtr, Decryptor, Encryption};
@@ -41,11 +43,14 @@ pub struct Connection {
     mac: Option<(Box<MacAlgorithm>, Box<MacAlgorithm>)>,
     seq: (u32, u32),
     tx_queue: VecDeque<Packet>,
+    reciever: Receiver<Packet>,
+    sender: Sender<Packet>,
     channels: BTreeMap<ChannelId, Channel>,
 }
 
 impl<'a> Connection {
     pub fn new(conn_type: ConnectionType) -> Connection {
+        let (tx, rx): (Sender<Packet>, Receiver<Packet>) = mpsc::channel();
         Connection {
             conn_type: conn_type,
             hash_data: HashData::default(),
@@ -56,6 +61,8 @@ impl<'a> Connection {
             mac: None,
             seq: (0, 0),
             tx_queue: VecDeque::new(),
+            sender: tx,
+            reciever: rx,
             channels: BTreeMap::new(),
         }
     }
@@ -67,18 +74,26 @@ impl<'a> Connection {
         let mut reader = BufReader::new(stream);
 
         loop {
+            if let Ok(packet) = self.reciever.try_recv() {
+                debug!("got packet from channel: {:?}", packet);
+                self.tx_queue.push_back(packet);
+            }
+            debug!("Receiving packet");
             let packet = self.recv(&mut reader)?;
+            debug!("Processing packet");
             let response = self.process(packet)?;
 
             let mut stream = reader.get_mut();
 
             if let Some(packet) = response {
+                debug!("Sending response");
                 self.send(&mut stream, packet)?;
             }
 
             // Send additional packets from the queue
             let mut packets: Vec<Packet> = self.tx_queue.drain(..).collect();
             for packet in packets.drain(..) {
+                debug!("got packet from queue: {:?}", packet);
                 self.send(&mut stream, packet)?;
             }
         }
@@ -208,6 +223,7 @@ impl<'a> Connection {
             MessageType::ChannelRequest => self.channel_request(packet),
             MessageType::ChannelData => self.channel_data(packet),
             MessageType::KeyExchange(_) => self.key_exchange(packet),
+            MessageType::ChannelWindowAdjust => self.window_adjust(packet),
             _ => {
                 error!("Unhandled packet: {:?}", packet);
                 Err(ConnectionError::ProtocolError)
@@ -302,7 +318,7 @@ impl<'a> Connection {
             0
         };
 
-        let channel = Channel::new(id, peer_id, window_size, max_packet_size);
+        let channel = Channel::new(id, peer_id, window_size, max_packet_size, self.sender.clone());
 
         let mut res = Packet::new(MessageType::ChannelOpenConfirmation);
         res.write_uint32(peer_id)?;
@@ -370,18 +386,20 @@ impl<'a> Connection {
         debug!("channel data: {:?}", data);
 
         let channel = self.channels.get_mut(&channel_id).expect("unable to get channel");
-        let buf = channel.data(data.as_slice())?;
+        channel.data(data.as_slice())?;
 
-        if let Some(data) = buf {
-            let mut test_resp = Packet::new(MessageType::ChannelData);
-            test_resp.write_uint32(channel_id)?;
-            //test_resp.write_string("hello ssh!\n")?;
-            test_resp.write_bytes(&data)?;
-            debug!("sending test resp: {:?}", test_resp);
-            Ok(Some(test_resp))
-        } else {
-            Ok(None)
-        }
+        Ok(None)
+
+        //if let Some(data) = buf {
+        //    let mut test_resp = Packet::new(MessageType::ChannelData);
+        //    test_resp.write_uint32(channel_id)?;
+        //    //test_resp.write_string("hello ssh!\n")?;
+        //    test_resp.write_bytes(&data)?;
+        //    debug!("sending test resp: {:?}", test_resp);
+        //    Ok(Some(test_resp))
+        //} else {
+        //    Ok(None)
+        //}
 
     }
 
@@ -479,5 +497,11 @@ impl<'a> Connection {
 
         self.key_exchange = Some(kex);
         result
+    }
+
+    fn window_adjust(&mut self, packet: Packet) -> Result<Option<Packet>> {
+        // TODO: finish this
+        trace!("Window_adjust: {:?}", packet);
+        Ok(None)
     }
 }

@@ -5,7 +5,16 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{self, Stdio};
 use std::thread::{self, JoinHandle};
+use std::collections::VecDeque;
+use std::sync::Mutex;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
+use packet::Packet;
+use packet::WritePacketExt;
 use sys;
+use message::MessageType;
 
 pub type ChannelId = u32;
 
@@ -15,7 +24,8 @@ pub struct Channel {
     peer_id: ChannelId,
     process: Option<process::Child>,
     pty: Option<(RawFd, PathBuf)>,
-    master: Option<File>,
+    pub master: Option<File>,
+    sender: Sender<Packet>,
     window_size: u32,
     peer_window_size: u32,
     max_packet_size: u32,
@@ -34,12 +44,16 @@ pub enum ChannelRequest {
         modes: Vec<u8>,
     },
     Shell,
+    Env {
+        var_name: String,
+        var_value: String,
+    },
 }
 
 impl Channel {
     pub fn new(
         id: ChannelId, peer_id: ChannelId, peer_window_size: u32,
-        max_packet_size: u32
+        max_packet_size: u32, sender: Sender<Packet>,
     ) -> Channel {
         Channel {
             id: id,
@@ -47,6 +61,7 @@ impl Channel {
             process: None,
             master: None,
             pty: None,
+            sender: sender,
             window_size: peer_window_size,
             peer_window_size: peer_window_size,
             max_packet_size: max_packet_size,
@@ -85,9 +100,10 @@ impl Channel {
                     pixel_width,
                     pixel_height,
                 );
+                let sender = self.sender.clone();
+                let channel_id = self.id;
 
-/*
-                self.read_thread = Some(thread::spawn(move || {
+                self.read_thread = Some(thread::spawn( move || {
                     #[cfg(target_os = "redox")]
                     use syscall::dup;
                     #[cfg(target_os = "redox")]
@@ -107,14 +123,21 @@ impl Channel {
                         if count == 0 {
                             break;
                         }
+
+                        let mut test_resp = Packet::new(MessageType::ChannelData);
+                        test_resp.write_uint32(channel_id);
+                        test_resp.write_bytes(&buf);
+
+                       debug!("queuing up {:?} in tx queue", test_resp);
+                       sender.send(test_resp);
+                        
                         println!("Read: {}", unsafe {
                             from_utf8_unchecked(&buf[0..count])
                         });
                     }
 
-                    println!("Quitting read thread.");
+                    warn!("Quitting read thread.");
                 }));
-*/
 
                 self.pty = Some((master_fd, tty_path));
                 self.master = Some(unsafe { File::from_raw_fd(master_fd) });
@@ -144,7 +167,7 @@ impl Channel {
                         .into_raw_fd();
 
                     // TODO: this might require root to login
-                    process::Command::new("login")
+                    process::Command::new("bash")
                         .stdin(unsafe { Stdio::from_raw_fd(stdin) })
                         .stdout(unsafe { Stdio::from_raw_fd(stdout) })
                         .stderr(unsafe { Stdio::from_raw_fd(stderr) })
@@ -163,9 +186,10 @@ impl Channel {
             master.write_all(data)?;
             master.flush()?;
 
-            let mut buf = vec![0u8; 4096];
-            let count = master.read(&mut buf)?;
-            Ok(Some(buf))
+            //let mut buf = vec![0u8; 4096];
+            //let count = master.read(&mut buf)?;
+            //Ok(Some(buf))
+            Ok(None)
         }
         else {
             Ok(None)
